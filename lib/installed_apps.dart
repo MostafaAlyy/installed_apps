@@ -46,8 +46,8 @@ class InstalledApps {
   /// Opens the settings screen (App Info) of an app with the specified package name.
   ///
   /// [packageName] is the package name of the app whose settings screen should be opened.
-  static openSettings(String packageName) {
-    _channel.invokeMethod(
+  static Future<void> openSettings(String packageName) async {
+    await _channel.invokeMethod(
       "openSettings",
       {"package_name": packageName},
     );

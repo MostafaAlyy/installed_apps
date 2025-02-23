@@ -252,12 +252,15 @@ class InstalledAppsPlugin() : MethodCallHandler, FlutterPlugin, ActivityAware {
         if (usageStatsList.isNullOrEmpty()) {
             return emptyList()
         }
-        
-        // Sort all apps by usage time in descending order
-        val sortedList = usageStatsList.sortedByDescending { it.totalTimeInForeground }
-        
+
+        // Aggregate usage stats by package to avoid duplicate entries.
+        val aggregatedUsage = mutableMapOf<String, Long>()
+        usageStatsList.forEach { usage ->
+            aggregatedUsage[usage.packageName] = aggregatedUsage.getOrDefault(usage.packageName, 0L) + usage.totalTimeInForeground
+        }
+
         val packageManager = getPackageManager(context!!)
-        // If only visible apps are required, compute the set of visible package names
+        // If only visible apps are required, compute the set of visible package names.
         val visiblePackageNames: Set<String> = if (onlyVisibleApps) {
             val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
@@ -266,21 +269,22 @@ class InstalledAppsPlugin() : MethodCallHandler, FlutterPlugin, ActivityAware {
         } else {
             emptySet()
         }
-        
-        // Filter the sorted list only if required
-        val filteredList = if (onlyVisibleApps) {
-            sortedList.filter { usage ->
-                visiblePackageNames.contains(usage.packageName)
-            }
+
+        // Filter aggregated usage if required.
+        val filteredAggregated = if (onlyVisibleApps) {
+            aggregatedUsage.filterKeys { it in visiblePackageNames }
         } else {
-            sortedList
+            aggregatedUsage
         }
-        
-        return filteredList.take(limit).mapNotNull { usage ->
+
+        // Sort aggregated usage descending by total usage time.
+        val sortedAggregated = filteredAggregated.entries.sortedByDescending { it.value }
+
+        return sortedAggregated.take(limit).mapNotNull { entry ->
             try {
-                val appInfo = packageManager.getApplicationInfo(usage.packageName, 0)
+                val appInfo = packageManager.getApplicationInfo(entry.key, 0)
                 val appMap = convertAppToMap(packageManager, appInfo, withIcon)
-                appMap["daily_limit_ended"] = usage.totalTimeInForeground >= DAILY_USAGE_LIMIT_MS
+                appMap["daily_limit_ended"] = entry.value >= DAILY_USAGE_LIMIT_MS
                 appMap
             } catch (e: PackageManager.NameNotFoundException) {
                 null

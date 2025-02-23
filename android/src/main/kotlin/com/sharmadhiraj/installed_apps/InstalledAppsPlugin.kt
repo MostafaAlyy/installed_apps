@@ -104,8 +104,9 @@ class InstalledAppsPlugin() : MethodCallHandler, FlutterPlugin, ActivityAware {
             "getMostUsedApps" -> {
                 val limit = call.argument<Int>("limit") ?: 5
                 val withIcon = call.argument<Boolean>("with_icon") ?: false
+                val onlyVisibleApps = call.argument<Boolean>("only_visible_apps") ?: false
                 Thread {
-                    val apps: List<Map<String, Any?>> = getMostUsedApps(limit, withIcon)
+                    val apps: List<Map<String, Any?>> = getMostUsedApps(limit, withIcon, onlyVisibleApps)
                     result.success(apps)
                 }.start()
             }
@@ -234,7 +235,7 @@ class InstalledAppsPlugin() : MethodCallHandler, FlutterPlugin, ActivityAware {
         }
     }
 
-    private fun getMostUsedApps(limit: Int, withIcon: Boolean): List<Map<String, Any?>> {
+    private fun getMostUsedApps(limit: Int, withIcon: Boolean, onlyVisibleApps: Boolean): List<Map<String, Any?>> {
         val DAILY_USAGE_LIMIT_MS = 6 * 60 * 60 * 1000L
         val usageStatsManager = context!!.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val endTime = System.currentTimeMillis()
@@ -252,9 +253,30 @@ class InstalledAppsPlugin() : MethodCallHandler, FlutterPlugin, ActivityAware {
             return emptyList()
         }
         
+        // Sort all apps by usage time in descending order
         val sortedList = usageStatsList.sortedByDescending { it.totalTimeInForeground }
+        
         val packageManager = getPackageManager(context!!)
-        return sortedList.take(limit).mapNotNull { usage ->
+        // If only visible apps are required, compute the set of visible package names
+        val visiblePackageNames: Set<String> = if (onlyVisibleApps) {
+            val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            packageManager.queryIntentActivities(launcherIntent, 0).map { it.activityInfo.packageName }.toSet()
+        } else {
+            emptySet()
+        }
+        
+        // Filter the sorted list only if required
+        val filteredList = if (onlyVisibleApps) {
+            sortedList.filter { usage ->
+                visiblePackageNames.contains(usage.packageName)
+            }
+        } else {
+            sortedList
+        }
+        
+        return filteredList.take(limit).mapNotNull { usage ->
             try {
                 val appInfo = packageManager.getApplicationInfo(usage.packageName, 0)
                 val appMap = convertAppToMap(packageManager, appInfo, withIcon)

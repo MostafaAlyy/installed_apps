@@ -124,13 +124,20 @@ class InstalledApps {
   ///
   /// [limit] specifies the maximum number of apps to return.
   /// [withIcon] specifies whether to include app icons in the list.
-  ///
+  /// [onlyVisibleApps] if true, only returns apps that appear on the home screen.
   /// Returns a list of [AppInfo] objects representing the most used apps.
-  static Future<List<AppInfo>> getMostUsedApps(
-      {int limit = 5, bool withIcon = false}) async {
+  static Future<List<AppInfo>> getMostUsedApps({
+    int limit = 5,
+    bool withIcon = false,
+    bool onlyVisibleApps = false,
+  }) async {
     dynamic apps = await _channel.invokeMethod(
       "getMostUsedApps",
-      {"limit": limit, "with_icon": withIcon},
+      {
+        "limit": limit,
+        "with_icon": withIcon,
+        "only_visible_apps": onlyVisibleApps,
+      },
     );
     return AppInfo.parseList(apps);
   }
